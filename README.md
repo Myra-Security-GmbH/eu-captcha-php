@@ -21,6 +21,8 @@ Proceed as follows to integrate the EU CAPTCHA to your Website:
 
 ### Example
 ```php
+use Myrasec\EU_Captcha;
+
 $captcha = new EU_Captcha([
     'sitekey' => '<site key for your website>',
     'secret' => '<secret for the site key of your website>',
