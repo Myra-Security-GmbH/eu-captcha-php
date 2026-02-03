@@ -1,6 +1,7 @@
 {
     "name": "myra-security-gmbh/eu-captcha",
     "description": "EU captcha protects your website/API against abuse like form spam and credential stuffing",
+    "license": "BSD-2-Clause",
     "require": {
         "php": ">=5.0"
     }

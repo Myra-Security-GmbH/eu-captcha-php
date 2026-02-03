@@ -26,7 +26,7 @@ use Myrasec\EU_Captcha;
 $captcha = new EU_Captcha([
     'sitekey' => '<site key for your website>',
     'secret' => '<secret for the site key of your website>',
-    'Fail Default' => true,
+    'failDefault' => true,
 ]);
 
 $res = $captcha->validate($_POST["eu-captcha-response"]);
