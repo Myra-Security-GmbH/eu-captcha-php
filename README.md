@@ -22,6 +22,11 @@ composer require myra-security-gmbh/eu-captcha
 
 ## Quick start
 
+> **Using a SPA framework?** The script tag and `<div>` approach below is for server-rendered pages.
+> If you are building with React, Vue, or Angular, use the matching npm package for the frontend widget
+> and continue to use this package for server-side verification only.
+> See [SPA integration guides](https://docs.eu-captcha.eu/integration/spa/) for details.
+
 Add the widget script to any page that contains a form you want to protect:
 
 ```html
@@ -123,6 +128,13 @@ if (!$captcha->verifyCredentials()) {
 ```
 
 `verifyCredentials()` returns `false` on any network or API error rather than throwing, so it is safe to call during application initialisation.
+
+## Further reading
+
+- [Full documentation](https://docs.eu-captcha.eu)
+- [PHP module guide](https://docs.eu-captcha.eu/integration/php-module/)
+- [Server-side verification reference](https://docs.eu-captcha.eu/integration/server-side-verification/)
+- [SPA integration guides](https://docs.eu-captcha.eu/integration/spa/) (React / Next.js, Vue / Nuxt, Angular)
 
 ## License
 
