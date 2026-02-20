@@ -1,38 +1,129 @@
-# What is the Myra EU CAPTCHA
+# EU-Captcha PHP client
 
-The Myra EU CAPTCHA protects your website(s) and API(s) against security issues like bots, prevents fraud, and secures your forms from spam and credential stuffing. As a stand-alone solution from Myra, the captcha can be easily integrated with three steps into all your websites. As soon as a visitor fills out a form and submits it, the EU CAPTCHA uses so-called challenges to check whether the request is legitimate or needs to be blocked. The visitor of your website does not need to do anything, as the check runs automatically in the background. Only a Myra logo gives the visitor feedback that they passed the challenge.  
+Privacy-first, no-cookie, no-manual-interaction bot protection for PHP 8.0+ applications. Automatically filters bots, spam, and credential-stuffing attempts without requiring any user interaction.
+
+## Requirements
+
+- PHP 8.0 or later
+- [Guzzle](https://docs.guzzlephp.org/) (`guzzlehttp/guzzle` ^6.0 or ^7.0)
 
 ## Installation
 
-Install the library with composer.
+> **Note:** This package requires PHP 8.0 or newer. If you are running PHP 5.0–7.x, use [`myra-security-gmbh/eu-captcha-old`](https://packagist.org/packages/myra-security-gmbh/eu-captcha-old) instead, which supports PHP 5.0+ via `file_get_contents()`.
 
-```sh
+```bash
 composer require myra-security-gmbh/eu-captcha
 ```
 
-## Integration
-Proceed as follows to integrate the EU CAPTCHA to your Website:
-1. Register a new Account under https://app.eu-captcha.eu/user-registration. 
-2. Create a new site key for your website, see https://docs.eu-captcha.eu/Content/first_steps/Captcha_create_side_key.htm.
-3. Add the code for the EU Captcha to the website where your form is, see https://docs.eu-captcha.eu/Content/first_steps/Captcha_html_code.htm
-3. Copy and save the site key and secret, see https://docs.eu-captcha.eu/Content/views/1-Dashboard/sitekey_tabs/Captcha_details_tab.htm.
-4. Open your PHP Project.
-5. Add the site key and secret to the code.
+## Getting credentials
 
-### Example
+1. Register at [app.eu-captcha.eu](https://app.eu-captcha.eu/user-registration)
+2. Create a site and copy the **sitekey** and **secret** from the dashboard
+
+## Quick start
+
+Add the widget script to any page that contains a form you want to protect:
+
+```html
+<script src="https://cdn.eu-captcha.eu/verify.js" async defer></script>
+```
+
+Place the widget inside your form:
+
+```html
+<div class="eu-captcha" data-sitekey="EUCAPTCHA_SITE_KEY"></div>
+```
+
+Verify the submitted token on your server:
+
 ```php
-use Myrasec\EU_Captcha;
+<?php
 
-$captcha = new EU_Captcha([
-    'sitekey' => '<site key for your website>',
-    'secret' => '<secret for the site key of your website>',
-    'failDefault' => true,
-]);
+use Myrasec\EuCaptcha;
 
-$res = $captcha->validate($_POST["eu-captcha-response"]);
+$captcha = new EuCaptcha(
+    sitekey: EUCAPTCHA_SITE_KEY,
+    secret:  EUCAPTCHA_SECRET_KEY,
+);
 
-if (!$res->success()) {
-  // reject form submission / API call
-  return;
+$result = $captcha->validate();
+
+if (!$result->success()) {
+    // Reject the form submission
 }
 ```
+
+`validate()` reads the token automatically from `$_POST['eu-captcha-response']` and the client IP from server headers, so no extra wiring is needed in the common case.
+
+## Configuration options
+
+All options are passed as named constructor arguments.
+
+| Option             | Type     | Default | Description |
+|--------------------|----------|---------|-------------|
+| `sitekey`          | string   | —       | **Required.** Public sitekey from the dashboard. |
+| `secret`           | string   | —       | **Required.** Secret key from the dashboard. Never expose this client-side. |
+| `failDefault`      | bool     | `true`  | Return value used for both network and token state when the API cannot be reached. `true` = fail open (allow on error); `false` = fail closed (deny on error). |
+| `checkCdnHeaders`  | bool     | `true`  | When `true`, the client IP is resolved from CDN/proxy headers (`HTTP_CLIENT_IP`, `HTTP_X_FORWARDED_FOR`, `HTTP_X_REAL_IP`) before falling back to `REMOTE_ADDR`. Set to `false` when your server is not behind a proxy, or when you pass the IP explicitly. |
+| `verifyUrl`        | string   | *(production URL)* | Override the EU Captcha verify endpoint. Useful for testing. |
+| `credentialsUrl`   | string   | *(production URL)* | Override the EU Captcha verify-credentials endpoint. |
+| `client`           | `?Client`| `null`  | Optional Guzzle client instance for custom configuration or testing. |
+
+## The result object
+
+`validate()` returns an `EuCaptchaResult` with three methods:
+
+| Method              | Returns `true` when…                                        |
+|---------------------|-------------------------------------------------------------|
+| `success()`         | The API was reached **and** the token is valid.             |
+| `successNetwork()`  | The API call completed without a network or transport error. |
+| `successToken()`    | The API reported the submitted token as valid.              |
+
+Checking both states separately lets you distinguish a user failing the captcha from an API outage:
+
+```php
+<?php
+
+$result = $captcha->validate();
+
+if (!$result->successNetwork()) {
+    // Could not reach the API — consider logging or alerting
+}
+
+if (!$result->successToken()) {
+    // Token was rejected — the submission is likely automated
+}
+```
+
+## Explicit token and IP
+
+Pass the token and client IP explicitly when you need full control (e.g. non-standard form field names or API endpoints):
+
+```php
+<?php
+
+$token    = $_POST['my-captcha-field'] ?? '';
+$clientIp = $_SERVER['REMOTE_ADDR'];
+
+$result = $captcha->validate($token, $clientIp);
+```
+
+## Verifying credentials
+
+Use `verifyCredentials()` to confirm your sitekey and secret are valid without submitting a client token. This is useful for startup or configuration checks:
+
+```php
+<?php
+
+$captcha = new EuCaptcha(sitekey: EUCAPTCHA_SITE_KEY, secret: EUCAPTCHA_SECRET_KEY);
+
+if (!$captcha->verifyCredentials()) {
+    // Credentials are invalid or the API is unreachable — log and alert
+}
+```
+
+`verifyCredentials()` returns `false` on any network or API error rather than throwing, so it is safe to call during application initialisation.
+
+## License
+
+BSD 2-Clause. See [LICENSE](LICENSE) for details.
