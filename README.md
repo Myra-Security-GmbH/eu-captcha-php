@@ -181,6 +181,121 @@ class ContactController
 
 `$request->getClientIp()` respects Symfony's trusted-proxy configuration, so the real visitor IP is forwarded correctly when running behind a CDN or load balancer. Pass the User-Agent as a third argument to `validate()` if you want to forward it to the API as well.
 
+## Laravel
+
+Store credentials in `.env` and expose them through `config/services.php` — the Laravel convention for third-party credentials:
+
+**`.env`**
+
+```
+EUCAPTCHA_SITE_KEY=YOUR_SITEKEY
+EUCAPTCHA_SECRET_KEY=YOUR_SECRET
+```
+
+**`config/services.php`**
+
+```php
+'eucaptcha' => [
+    'sitekey' => env('EUCAPTCHA_SITE_KEY'),
+    'secret'  => env('EUCAPTCHA_SECRET_KEY'),
+],
+```
+
+**Controller**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Myrasec\EuCaptcha;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+
+class ContactController extends Controller
+{
+    public function submit(Request $request): RedirectResponse
+    {
+        $captcha = new EuCaptcha(
+            sitekey: config('services.eucaptcha.sitekey'),
+            secret:  config('services.eucaptcha.secret'),
+        );
+
+        $result = $captcha->validate(
+            $request->input('eu-captcha-response'),
+            $request->ip(),
+        );
+
+        if (!$result->success()) {
+            return back()->withErrors(['captcha' => 'CAPTCHA verification failed.']);
+        }
+
+        // process the form...
+
+        return redirect()->route('contact.success');
+    }
+}
+```
+
+`$request->ip()` respects Laravel's trusted-proxy configuration, so the real visitor IP is forwarded correctly when running behind a load balancer or CDN.
+
+### Form Request
+
+For reusable validation across multiple controllers, add the CAPTCHA check to a dedicated `FormRequest`:
+
+```php
+<?php
+
+namespace App\Http\Requests;
+
+use Myrasec\EuCaptcha;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+
+class ContactRequest extends FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'name'    => ['required', 'string', 'max:255'],
+            'email'   => ['required', 'email'],
+            'message' => ['required', 'string'],
+        ];
+    }
+
+    protected function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $captcha = new EuCaptcha(
+                sitekey: config('services.eucaptcha.sitekey'),
+                secret:  config('services.eucaptcha.secret'),
+            );
+
+            $result = $captcha->validate(
+                $this->input('eu-captcha-response'),
+                $this->ip(),
+            );
+
+            if (!$result->success()) {
+                $validator->errors()->add('captcha', 'CAPTCHA verification failed.');
+            }
+        });
+    }
+}
+```
+
+Inject `ContactRequest` instead of `Request` in your controller method — Laravel resolves and validates it automatically before the method body runs:
+
+```php
+public function submit(ContactRequest $request): RedirectResponse
+{
+    // validation and CAPTCHA check already passed
+    // process the form...
+
+    return redirect()->route('contact.success');
+}
+```
+
 ## Further reading
 
 - [Full documentation](https://docs.eu-captcha.eu)
