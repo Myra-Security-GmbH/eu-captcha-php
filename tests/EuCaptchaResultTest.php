@@ -74,4 +74,25 @@ class EuCaptchaResultTest extends TestCase
         $this->assertTrue((new EuCaptchaResult(stateNetwork: false, stateToken: true))->successToken());
         $this->assertFalse((new EuCaptchaResult(stateNetwork: true, stateToken: false))->successToken());
     }
+
+    public function testSuccessReturnsFalseWhenTrainIsTrue(): void
+    {
+        $result = new EuCaptchaResult(stateNetwork: true, stateToken: true, stateTrain: true);
+
+        $this->assertFalse($result->success());
+    }
+
+    public function testSuccessReturnsTrueWhenTrainIsFalseExplicitly(): void
+    {
+        $result = new EuCaptchaResult(stateNetwork: true, stateToken: true, stateTrain: false);
+
+        $this->assertTrue($result->success());
+    }
+
+    public function testIsTrainReflectsTrainState(): void
+    {
+        $this->assertTrue((new EuCaptchaResult(stateNetwork: true, stateToken: true, stateTrain: true))->isTrain());
+        $this->assertFalse((new EuCaptchaResult(stateNetwork: true, stateToken: true, stateTrain: false))->isTrain());
+        $this->assertNull((new EuCaptchaResult(stateNetwork: true, stateToken: true, stateTrain: null))->isTrain());
+    }
 }

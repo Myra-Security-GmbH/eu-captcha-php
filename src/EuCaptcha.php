@@ -34,7 +34,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use Myrasec\Exception\EuCaptchaException;
 
-class EuCaptcha
+class EuCaptcha implements EuCaptchaInterface
 {
     private const VERIFY_URL = 'https://api.eu-captcha.eu/v1/verify/';
     private const CREDENTIALS_URL = 'https://api.eu-captcha.eu/v1/verify-credentials';
@@ -76,18 +76,20 @@ class EuCaptcha
      * Validates a captcha token against the EU Captcha API.
      *
      * If $token is not provided, the value of $_POST['eu-captcha-response'] is used.
-     * If $remoteAddr is not provided, the client IP is read from HTTP_X_FORWARDED_FOR or REMOTE_ADDR.
+     * If $remoteAddr is not provided, the client IP is resolved via resolveClientIp().
+     * If $userAgent is not provided, it falls back to $_SERVER['HTTP_USER_AGENT'].
      *
-     * On API or network failure, the result reflects $failDefault for stateToken
-     * and false for stateNetwork, so callers can distinguish between a failed
+     * On API or network failure, the result reflects $failDefault for stateNetwork and
+     * stateToken, and null for stateTrain, so callers can distinguish between a failed
      * validation and a failed network request.
      *
      * @param string|null $token      The captcha response token submitted by the client. Falls back to $_POST.
      * @param string      $remoteAddr The client's IP address. Falls back to resolveClientIp() if empty.
+     * @param string      $userAgent  The client's User-Agent header. Falls back to $_SERVER['HTTP_USER_AGENT'] if empty.
      *
-     * @return EuCaptchaResult Result containing network and token validation states.
+     * @return EuCaptchaResult Result containing network, token, and train validation states.
      */
-    public function validate(?string $token = null, string $remoteAddr = ''): EuCaptchaResult
+    public function validate(?string $token = null, string $remoteAddr = '', string $userAgent = ''): EuCaptchaResult
     {
         $token ??= $_POST['eu-captcha-response'] ?? null;
 
@@ -95,13 +97,18 @@ class EuCaptcha
             $remoteAddr = $this->resolveClientIp();
         }
 
+        if (empty($userAgent)) {
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        }
+
         try {
             $response = $this->client->post($this->verifyUrl, [
                 'json' => [
-                    'sitekey'  => $this->sitekey,
-                    'secret'   => $this->secret,
-                    'remoteip' => $remoteAddr,
-                    'response' => $token,
+                    'sitekey'           => $this->sitekey,
+                    'secret'            => $this->secret,
+                    'client_ip'         => $remoteAddr,
+                    'client_token'      => $token ?? '',
+                    'client_user_agent' => $userAgent,
                 ],
             ]);
 
@@ -109,12 +116,14 @@ class EuCaptcha
 
             return new EuCaptchaResult(
                 stateNetwork: true,
-                stateToken: (bool) ($body['success'] ?? false),
+                stateToken:   (bool) ($body['success'] ?? false),
+                stateTrain:   (bool) ($body['train'] ?? false),
             );
         } catch (GuzzleException) {
             return new EuCaptchaResult(
                 stateNetwork: $this->failDefault,
-                stateToken: $this->failDefault,
+                stateToken:   $this->failDefault,
+                stateTrain:   null,
             );
         }
     }

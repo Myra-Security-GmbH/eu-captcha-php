@@ -129,6 +129,58 @@ if (!$captcha->verifyCredentials()) {
 
 `verifyCredentials()` returns `false` on any network or API error rather than throwing, so it is safe to call during application initialisation.
 
+## Symfony
+
+Type-hint `EuCaptchaInterface` in your services and controllers so Symfony can autowire the client without coupling your code to the concrete class.
+
+Register `EuCaptcha` as a service and alias the interface to it in `config/services.yaml`:
+
+```yaml
+services:
+    Myrasec\EuCaptcha:
+        arguments:
+            $sitekey: '%env(EUCAPTCHA_SITE_KEY)%'
+            $secret:  '%env(EUCAPTCHA_SECRET_KEY)%'
+    Myrasec\EuCaptchaInterface: '@Myrasec\EuCaptcha'
+```
+
+Inject the interface into a controller:
+
+```php
+<?php
+
+namespace App\Controller;
+
+use Myrasec\EuCaptchaInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+
+class ContactController
+{
+    public function __construct(private EuCaptchaInterface $captcha) {}
+
+    #[Route('/contact', methods: ['POST'])]
+    public function submit(Request $request): Response
+    {
+        $result = $this->captcha->validate(
+            $request->request->getString('eu-captcha-response'),
+            $request->getClientIp() ?? '',
+        );
+
+        if (!$result->success()) {
+            return new Response('CAPTCHA verification failed', Response::HTTP_BAD_REQUEST);
+        }
+
+        // process the form...
+
+        return new Response('OK');
+    }
+}
+```
+
+`$request->getClientIp()` respects Symfony's trusted-proxy configuration, so the real visitor IP is forwarded correctly when running behind a CDN or load balancer. Pass the User-Agent as a third argument to `validate()` if you want to forward it to the API as well.
+
 ## Further reading
 
 - [Full documentation](https://docs.eu-captcha.eu)

@@ -61,11 +61,15 @@ class EuCaptchaTest extends TestCase
         return new Client(['handler' => $stack]);
     }
 
+    /** @return array<string, mixed> */
+    private function capturedBody(array $container): array
+    {
+        return json_decode((string) $container[0]['request']->getBody(), true) ?? [];
+    }
+
     private function capturedRemoteIp(array $container): string
     {
-        $body = json_decode((string) $container[0]['request']->getBody(), true);
-
-        return $body['remoteip'] ?? '';
+        return $this->capturedBody($container)['client_ip'] ?? '';
     }
 
     // -------------------------------------------------------------------------
@@ -202,6 +206,108 @@ class EuCaptchaTest extends TestCase
         unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
     }
 
+    public function testValidateTrainTrueFromApiMakesSuccessFalse(): void
+    {
+        $client = $this->makeClient([
+            new Response(200, [], json_encode(['success' => true, 'train' => true])),
+        ]);
+
+        $result = (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '127.0.0.1');
+
+        $this->assertFalse($result->success());
+        $this->assertTrue($result->successToken());
+        $this->assertTrue($result->isTrain());
+    }
+
+    public function testValidateTrainFalseFromApiIsNormalOperation(): void
+    {
+        $client = $this->makeClient([
+            new Response(200, [], json_encode(['success' => true, 'train' => false])),
+        ]);
+
+        $result = (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '127.0.0.1');
+
+        $this->assertTrue($result->success());
+        $this->assertFalse($result->isTrain());
+    }
+
+    public function testValidateNetworkFailureSetsIsTrainNull(): void
+    {
+        $client = $this->makeClient([
+            new ConnectException('Connection refused', new Request('POST', 'test')),
+        ]);
+
+        $result = (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '127.0.0.1');
+
+        $this->assertNull($result->isTrain());
+    }
+
+    public function testValidateSendsTokenAsClientToken(): void
+    {
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('my-token', '127.0.0.1');
+
+        $this->assertSame('my-token', $this->capturedBody($container)['client_token']);
+    }
+
+    public function testValidateSendsExplicitRemoteAddrAsClientIp(): void
+    {
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '5.6.7.8');
+
+        $this->assertSame('5.6.7.8', $this->capturedBody($container)['client_ip']);
+    }
+
+    public function testValidateSendsExplicitUserAgentAsClientUserAgent(): void
+    {
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '127.0.0.1', 'Mozilla/5.0');
+
+        $this->assertSame('Mozilla/5.0', $this->capturedBody($container)['client_user_agent']);
+    }
+
+    public function testValidateReadsUserAgentFromServerHeader(): void
+    {
+        $_SERVER['HTTP_USER_AGENT'] = 'TestAgent/1.0';
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '127.0.0.1');
+
+        $this->assertSame('TestAgent/1.0', $this->capturedBody($container)['client_user_agent']);
+
+        unset($_SERVER['HTTP_USER_AGENT']);
+    }
+
+    public function testValidateExplicitUserAgentOverridesServerHeader(): void
+    {
+        $_SERVER['HTTP_USER_AGENT'] = 'ServerAgent/1.0';
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('token', '127.0.0.1', 'ExplicitAgent/2.0');
+
+        $this->assertSame('ExplicitAgent/2.0', $this->capturedBody($container)['client_user_agent']);
+
+        unset($_SERVER['HTTP_USER_AGENT']);
+    }
+
     // -------------------------------------------------------------------------
     // verifyCredentials()
     // -------------------------------------------------------------------------
@@ -232,6 +338,17 @@ class EuCaptchaTest extends TestCase
     {
         $client = $this->makeClient([
             new ConnectException('Connection refused', new Request('POST', 'test')),
+        ]);
+
+        $this->assertFalse(
+            (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))->verifyCredentials()
+        );
+    }
+
+    public function testVerifyCredentialsReturnsFalseWhenResponseMissingValidKey(): void
+    {
+        $client = $this->makeClient([
+            new Response(200, [], json_encode(['other' => true])),
         ]);
 
         $this->assertFalse(
