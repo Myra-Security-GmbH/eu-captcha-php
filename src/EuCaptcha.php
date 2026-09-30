@@ -75,7 +75,8 @@ class EuCaptcha implements EuCaptchaInterface
     /**
      * Validates a captcha token against the EU Captcha API.
      *
-     * If $token is not provided, the value of $_POST['eu-captcha-response'] is used.
+     * If $token is not provided, it is read from the request body via resolveToken()
+     * ($_POST['eu-captcha-response'], falling back to a JSON request body).
      * If $remoteAddr is not provided, the client IP is resolved via resolveClientIp().
      * If $userAgent is not provided, it falls back to $_SERVER['HTTP_USER_AGENT'].
      *
@@ -91,7 +92,7 @@ class EuCaptcha implements EuCaptchaInterface
      */
     public function validate(?string $token = null, string $remoteAddr = '', string $userAgent = ''): EuCaptchaResult
     {
-        $token ??= $_POST['eu-captcha-response'] ?? null;
+        $token ??= $this->resolveToken();
 
         if (empty($remoteAddr)) {
             $remoteAddr = $this->resolveClientIp();
@@ -126,6 +127,55 @@ class EuCaptcha implements EuCaptchaInterface
                 stateTrain:   null,
             );
         }
+    }
+
+    /**
+     * Resolves the captcha token from the current request.
+     *
+     * Reads $_POST['eu-captcha-response'] first. When it is absent — as happens in
+     * frameworks such as Laravel that receive the request body as JSON, where PHP
+     * never populates $_POST even though the token is present — the raw request
+     * body is decoded as JSON and the token read from there. Returns an empty
+     * string when no token can be found, so the API still counts the attempt.
+     *
+     * Both sources are client-controlled, so only scalar values are accepted. A
+     * non-scalar value (e.g. `eu-captcha-response[]` or a JSON array/object) is
+     * ignored rather than cast to string, which would emit an "Array to string
+     * conversion" warning that some frameworks promote to an exception.
+     */
+    private function resolveToken(): string
+    {
+        if (isset($_POST['eu-captcha-response']) && is_scalar($_POST['eu-captcha-response'])) {
+            return (string) $_POST['eu-captcha-response'];
+        }
+
+        $raw = $this->readRawRequestBody();
+
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+
+            if (is_array($decoded)
+                && isset($decoded['eu-captcha-response'])
+                && is_scalar($decoded['eu-captcha-response'])) {
+                return (string) $decoded['eu-captcha-response'];
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Reads the raw HTTP request body.
+     *
+     * Extracted into its own method so it can be overridden in tests. For JSON
+     * request bodies php://input remains readable even after the framework has
+     * parsed it, which is the case this fallback targets.
+     */
+    protected function readRawRequestBody(): string
+    {
+        $raw = file_get_contents('php://input');
+
+        return $raw === false ? '' : $raw;
     }
 
     /**

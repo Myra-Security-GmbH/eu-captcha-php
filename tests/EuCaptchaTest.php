@@ -173,6 +173,129 @@ class EuCaptchaTest extends TestCase
         unset($_POST['eu-captcha-response']);
     }
 
+    public function testValidateReadsTokenFromJsonBodyWhenPostIsEmpty(): void
+    {
+        unset($_POST['eu-captcha-response']);
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return json_encode(['eu-captcha-response' => 'json-token']);
+            }
+        };
+
+        $result = $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertTrue($result->success());
+        $this->assertSame('json-token', $this->capturedBody($container)['client_token']);
+    }
+
+    public function testValidatePrefersPostTokenOverJsonBody(): void
+    {
+        $_POST['eu-captcha-response'] = 'post-token';
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return json_encode(['eu-captcha-response' => 'json-token']);
+            }
+        };
+
+        $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertSame('post-token', $this->capturedBody($container)['client_token']);
+
+        unset($_POST['eu-captcha-response']);
+    }
+
+    public function testValidateSendsEmptyTokenWhenNoTokenInPostOrBody(): void
+    {
+        unset($_POST['eu-captcha-response']);
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => false]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return '';
+            }
+        };
+
+        $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertSame('', $this->capturedBody($container)['client_token']);
+    }
+
+    public function testValidateIgnoresNonScalarJsonBodyToken(): void
+    {
+        unset($_POST['eu-captcha-response']);
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => false]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return json_encode(['eu-captcha-response' => ['x' => 1]]);
+            }
+        };
+
+        $result = $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertSame('', $this->capturedBody($container)['client_token']);
+        $this->assertFalse($result->success());
+    }
+
+    public function testValidateIgnoresNonScalarPostToken(): void
+    {
+        $_POST['eu-captcha-response'] = ['array-token'];
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => false]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return '';
+            }
+        };
+
+        $result = $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertSame('', $this->capturedBody($container)['client_token']);
+        $this->assertFalse($result->success());
+
+        unset($_POST['eu-captcha-response']);
+    }
+
+    public function testValidateFallsBackToJsonBodyWhenPostTokenIsNonScalar(): void
+    {
+        $_POST['eu-captcha-response'] = ['array-token'];
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return json_encode(['eu-captcha-response' => 'json-token']);
+            }
+        };
+
+        $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertSame('json-token', $this->capturedBody($container)['client_token']);
+
+        unset($_POST['eu-captcha-response']);
+    }
+
     public function testValidateReadsRemoteAddrFromRemoteAddr(): void
     {
         $_SERVER['REMOTE_ADDR'] = '10.0.0.1';
@@ -243,6 +366,28 @@ class EuCaptchaTest extends TestCase
             ->validate('token', '127.0.0.1');
 
         $this->assertNull($result->isTrain());
+    }
+
+    public function testValidatePostsExactlyTheVerifyApiFields(): void
+    {
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))
+            ->validate('my-token', '5.6.7.8', 'Mozilla/5.0');
+
+        $this->assertSame('POST', $container[0]['request']->getMethod());
+        $this->assertSame('https://api.eu-captcha.eu/v1/verify/', (string) $container[0]['request']->getUri());
+        $this->assertSame(
+            [
+                'sitekey'           => 'sk',
+                'secret'            => 'sec',
+                'client_ip'         => '5.6.7.8',
+                'client_token'      => 'my-token',
+                'client_user_agent' => 'Mozilla/5.0',
+            ],
+            $this->capturedBody($container),
+        );
     }
 
     public function testValidateSendsTokenAsClientToken(): void

@@ -9,10 +9,10 @@ Privacy-first, no-cookie, no-manual-interaction bot protection for PHP 8.0+ appl
 
 ## Installation
 
-> **Note:** This package requires PHP 8.0 or newer. If you are running PHP 5.0–7.x, use [`myra-security-gmbh/eu-captcha-old`](https://packagist.org/packages/myra-security-gmbh/eu-captcha-old) instead, which supports PHP 5.0+ via `file_get_contents()`.
+> **Note:** This package requires PHP 8.0 or newer. Always install it with the `^2.0` constraint shown below: without it, Composer on PHP 5.x–7.x silently falls back to the legacy 1.x release, whose API (`EU_Captcha` class) does not match this README. On PHP 7.x or older, call the [verification API](https://docs.eu-captcha.eu/en/api/verify/) directly instead.
 
 ```bash
-composer require myra-security-gmbh/eu-captcha
+composer require myra-security-gmbh/eu-captcha:^2.0
 ```
 
 ## Getting credentials
@@ -25,7 +25,7 @@ composer require myra-security-gmbh/eu-captcha
 > **Using a SPA framework?** The script tag and `<div>` approach below is for server-rendered pages.
 > If you are building with React, Vue, or Angular, use the matching npm package for the frontend widget
 > and continue to use this package for server-side verification only.
-> See [SPA integration guides](https://docs.eu-captcha.eu/integration/spa/) for details.
+> See [SPA integration guides](https://docs.eu-captcha.eu/en/integration/) for details.
 
 Add the widget script to any page that contains a form you want to protect:
 
@@ -58,7 +58,7 @@ if (!$result->success()) {
 }
 ```
 
-`validate()` reads the token automatically from `$_POST['eu-captcha-response']` and the client IP from server headers, so no extra wiring is needed in the common case.
+`validate()` reads the token automatically from the request body — `$_POST['eu-captcha-response']`, falling back to a JSON request body when `$_POST` is empty (as in Laravel apps that receive JSON) — and the client IP from server headers, so no extra wiring is needed in the common case. For full control (custom field names, or a framework-aware client IP such as Laravel's `$request->ip()`), pass the token and IP explicitly — see the [Laravel](#laravel) section below.
 
 ## Configuration options
 
@@ -298,10 +298,10 @@ public function submit(ContactRequest $request): RedirectResponse
 
 ## Further reading
 
-- [Full documentation](https://docs.eu-captcha.eu)
-- [PHP module guide](https://docs.eu-captcha.eu/integration/php-module/)
-- [Server-side verification reference](https://docs.eu-captcha.eu/integration/server-side-verification/)
-- [SPA integration guides](https://docs.eu-captcha.eu/integration/spa/) (React / Next.js, Vue / Nuxt, Angular)
+- [Full documentation](https://docs.eu-captcha.eu/en/)
+- [PHP module guide](https://docs.eu-captcha.eu/en/integration/backend/php/)
+- [Server-side verification reference](https://docs.eu-captcha.eu/en/api/verify/)
+- [SPA integration guides](https://docs.eu-captcha.eu/en/integration/) (React / Next.js, Vue / Nuxt, Angular)
 
 ## License
 
