@@ -9,10 +9,10 @@ Privacy-first, no-cookie, no-manual-interaction bot protection for PHP 8.0+ appl
 
 ## Installation
 
-> **Note:** This package requires PHP 8.0 or newer. Always install it with the `^2.0` constraint shown below: without it, Composer on PHP 5.x–7.x silently falls back to the legacy 1.x release, whose API (`EU_Captcha` class) does not match this README. On PHP 7.x or older, call the [verification API](https://docs.eu-captcha.eu/en/api/verify/) directly instead.
+> **Note:** This package requires PHP 8.0 or newer. Always install it with the `^2.0` constraint shown below (keep the quotes, so Windows `cmd.exe` does not drop the `^`): without it, Composer on PHP 5.x–7.x silently falls back to the legacy 1.x release, whose API (`EU_Captcha` class) does not match this README. On PHP 7.x or older, call the [verification API](https://docs.eu-captcha.eu/en/api/verify/) directly instead.
 
 ```bash
-composer require myra-security-gmbh/eu-captcha:^2.0
+composer require "myra-security-gmbh/eu-captcha:^2.0"
 ```
 
 ## Getting credentials

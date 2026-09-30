@@ -84,7 +84,7 @@ class EuCaptcha implements EuCaptchaInterface
      * stateToken, and null for stateTrain, so callers can distinguish between a failed
      * validation and a failed network request.
      *
-     * @param string|null $token      The captcha response token submitted by the client. Falls back to $_POST.
+     * @param string|null $token      The captcha response token submitted by the client. Falls back to $_POST, then a JSON request body.
      * @param string      $remoteAddr The client's IP address. Falls back to resolveClientIp() if empty.
      * @param string      $userAgent  The client's User-Agent header. Falls back to $_SERVER['HTTP_USER_AGENT'] if empty.
      *

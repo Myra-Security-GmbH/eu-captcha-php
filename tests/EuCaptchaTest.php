@@ -378,16 +378,17 @@ class EuCaptchaTest extends TestCase
 
         $this->assertSame('POST', $container[0]['request']->getMethod());
         $this->assertSame('https://api.eu-captcha.eu/v1/verify/', (string) $container[0]['request']->getUri());
-        $this->assertSame(
-            [
-                'sitekey'           => 'sk',
-                'secret'            => 'sec',
-                'client_ip'         => '5.6.7.8',
-                'client_token'      => 'my-token',
-                'client_user_agent' => 'Mozilla/5.0',
-            ],
-            $this->capturedBody($container),
-        );
+        $expected = [
+            'client_ip'         => '5.6.7.8',
+            'client_token'      => 'my-token',
+            'client_user_agent' => 'Mozilla/5.0',
+            'secret'            => 'sec',
+            'sitekey'           => 'sk',
+        ];
+        $body = $this->capturedBody($container);
+        ksort($body);
+
+        $this->assertSame($expected, $body);
     }
 
     public function testValidateSendsTokenAsClientToken(): void
