@@ -39,10 +39,28 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Myrasec\EuCaptcha;
 use Myrasec\Exception\EuCaptchaException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class EuCaptchaTest extends TestCase
 {
+    private array $postBackup = [];
+    private array $serverBackup = [];
+
+    protected function setUp(): void
+    {
+        $this->postBackup   = $_POST;
+        $this->serverBackup = $_SERVER;
+
+        unset($_POST['eu-captcha-response'], $_SERVER['CONTENT_TYPE'], $_SERVER['HTTP_CONTENT_TYPE']);
+    }
+
+    protected function tearDown(): void
+    {
+        $_POST   = $this->postBackup;
+        $_SERVER = $this->serverBackup;
+    }
+
     private function makeClient(array $responses): Client
     {
         $mock  = new MockHandler($responses);
@@ -169,13 +187,11 @@ class EuCaptchaTest extends TestCase
             ->validate(remoteAddr: '1.2.3.4');
 
         $this->assertTrue($result->success());
-
-        unset($_POST['eu-captcha-response']);
     }
 
     public function testValidateReadsTokenFromJsonBodyWhenPostIsEmpty(): void
     {
-        unset($_POST['eu-captcha-response']);
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
 
         $container = [];
         $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
@@ -193,8 +209,67 @@ class EuCaptchaTest extends TestCase
         $this->assertSame('json-token', $this->capturedBody($container)['client_token']);
     }
 
+    public function testValidateReadsJsonBodyWhenContentTypeHasCharsetParameter(): void
+    {
+        $_SERVER['CONTENT_TYPE'] = 'application/json; charset=utf-8';
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            protected function readRawRequestBody(): string
+            {
+                return json_encode(['eu-captcha-response' => 'json-token']);
+            }
+        };
+
+        $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertSame('json-token', $this->capturedBody($container)['client_token']);
+    }
+
+    #[DataProvider('nonJsonContentTypes')]
+    public function testValidateNeverReadsBodyWhenContentTypeIsNotJson(?string $contentType): void
+    {
+        if ($contentType !== null) {
+            $_SERVER['CONTENT_TYPE'] = $contentType;
+        }
+
+        $container = [];
+        $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => false]))], $container);
+
+        $captcha = new class('sk', 'sec', client: $client) extends EuCaptcha {
+            public bool $bodyWasRead = false;
+
+            protected function readRawRequestBody(): string
+            {
+                $this->bodyWasRead = true;
+
+                return json_encode(['eu-captcha-response' => 'json-token']);
+            }
+        };
+
+        $captcha->validate(remoteAddr: '1.2.3.4');
+
+        $this->assertFalse($captcha->bodyWasRead);
+        $this->assertSame('', $this->capturedBody($container)['client_token']);
+    }
+
+    /** @return array<string, array{0: ?string}> */
+    public static function nonJsonContentTypes(): array
+    {
+        return [
+            'form urlencoded' => ['application/x-www-form-urlencoded'],
+            'multipart'       => ['multipart/form-data; boundary=x'],
+            'plain text'      => ['text/plain'],
+            'no content type' => [null],
+        ];
+    }
+
     public function testValidatePrefersPostTokenOverJsonBody(): void
     {
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
+
         $_POST['eu-captcha-response'] = 'post-token';
 
         $container = [];
@@ -210,13 +285,11 @@ class EuCaptchaTest extends TestCase
         $captcha->validate(remoteAddr: '1.2.3.4');
 
         $this->assertSame('post-token', $this->capturedBody($container)['client_token']);
-
-        unset($_POST['eu-captcha-response']);
     }
 
     public function testValidateSendsEmptyTokenWhenNoTokenInPostOrBody(): void
     {
-        unset($_POST['eu-captcha-response']);
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
 
         $container = [];
         $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => false]))], $container);
@@ -235,7 +308,7 @@ class EuCaptchaTest extends TestCase
 
     public function testValidateIgnoresNonScalarJsonBodyToken(): void
     {
-        unset($_POST['eu-captcha-response']);
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
 
         $container = [];
         $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => false]))], $container);
@@ -255,6 +328,8 @@ class EuCaptchaTest extends TestCase
 
     public function testValidateIgnoresNonScalarPostToken(): void
     {
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
+
         $_POST['eu-captcha-response'] = ['array-token'];
 
         $container = [];
@@ -271,12 +346,12 @@ class EuCaptchaTest extends TestCase
 
         $this->assertSame('', $this->capturedBody($container)['client_token']);
         $this->assertFalse($result->success());
-
-        unset($_POST['eu-captcha-response']);
     }
 
     public function testValidateFallsBackToJsonBodyWhenPostTokenIsNonScalar(): void
     {
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
+
         $_POST['eu-captcha-response'] = ['array-token'];
 
         $container = [];
@@ -292,8 +367,6 @@ class EuCaptchaTest extends TestCase
         $captcha->validate(remoteAddr: '1.2.3.4');
 
         $this->assertSame('json-token', $this->capturedBody($container)['client_token']);
-
-        unset($_POST['eu-captcha-response']);
     }
 
     public function testValidateReadsRemoteAddrFromRemoteAddr(): void
@@ -308,8 +381,6 @@ class EuCaptchaTest extends TestCase
             ->validate('token');
 
         $this->assertTrue($result->success());
-
-        unset($_SERVER['REMOTE_ADDR']);
     }
 
     public function testValidatePrefersXForwardedForOverRemoteAddr(): void
@@ -325,8 +396,6 @@ class EuCaptchaTest extends TestCase
             ->validate('token');
 
         $this->assertTrue($result->success());
-
-        unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
     }
 
     public function testValidateTrainTrueFromApiMakesSuccessFalse(): void
@@ -435,8 +504,6 @@ class EuCaptchaTest extends TestCase
             ->validate('token', '127.0.0.1');
 
         $this->assertSame('TestAgent/1.0', $this->capturedBody($container)['client_user_agent']);
-
-        unset($_SERVER['HTTP_USER_AGENT']);
     }
 
     public function testValidateExplicitUserAgentOverridesServerHeader(): void
@@ -450,8 +517,6 @@ class EuCaptchaTest extends TestCase
             ->validate('token', '127.0.0.1', 'ExplicitAgent/2.0');
 
         $this->assertSame('ExplicitAgent/2.0', $this->capturedBody($container)['client_user_agent']);
-
-        unset($_SERVER['HTTP_USER_AGENT']);
     }
 
     // -------------------------------------------------------------------------
@@ -518,8 +583,6 @@ class EuCaptchaTest extends TestCase
         (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))->validate('token');
 
         $this->assertSame('203.0.113.1', $this->capturedRemoteIp($container));
-
-        unset($_SERVER['HTTP_CLIENT_IP'], $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
     }
 
     public function testCheckCdnHeadersTrueUsesXForwardedForWhenNoClientIp(): void
@@ -533,8 +596,6 @@ class EuCaptchaTest extends TestCase
         (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))->validate('token');
 
         $this->assertSame('203.0.113.2', $this->capturedRemoteIp($container));
-
-        unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
     }
 
     public function testCheckCdnHeadersTrueUsesFirstEntryOfXForwardedFor(): void
@@ -548,8 +609,6 @@ class EuCaptchaTest extends TestCase
         (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))->validate('token');
 
         $this->assertSame('203.0.113.10', $this->capturedRemoteIp($container));
-
-        unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
     }
 
     public function testCheckCdnHeadersTrueUsesXRealIpAsFallback(): void
@@ -563,8 +622,6 @@ class EuCaptchaTest extends TestCase
         (new EuCaptcha(sitekey: 'sk', secret: 'sec', client: $client))->validate('token');
 
         $this->assertSame('203.0.113.3', $this->capturedRemoteIp($container));
-
-        unset($_SERVER['HTTP_X_REAL_IP'], $_SERVER['REMOTE_ADDR']);
     }
 
     public function testCheckCdnHeadersFalseIgnoresProxyHeadersAndUsesRemoteAddr(): void
@@ -580,7 +637,5 @@ class EuCaptchaTest extends TestCase
         (new EuCaptcha(sitekey: 'sk', secret: 'sec', checkCdnHeaders: false, client: $client))->validate('token');
 
         $this->assertSame('10.0.0.1', $this->capturedRemoteIp($container));
-
-        unset($_SERVER['HTTP_CLIENT_IP'], $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['HTTP_X_REAL_IP'], $_SERVER['REMOTE_ADDR']);
     }
 }

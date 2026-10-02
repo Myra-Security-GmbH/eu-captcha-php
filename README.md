@@ -9,10 +9,10 @@ Privacy-first, no-cookie, no-manual-interaction bot protection for PHP 8.0+ appl
 
 ## Installation
 
-> **Note:** This package requires PHP 8.0 or newer. Always install it with the `^2.0` constraint shown below (keep the quotes, so Windows `cmd.exe` does not drop the `^`): without it, Composer on PHP 5.x–7.x silently falls back to the legacy 1.x release, whose API (`EU_Captcha` class) does not match this README. On PHP 7.x or older, call the [verification API](https://docs.eu-captcha.eu/en/api/verify/) directly instead.
+> **Note:** This package requires PHP 8.0 or newer. Always install it with the `^2.0.1` constraint shown below (keep the quotes, so Windows `cmd.exe` does not drop the `^`). The constraint excludes 2.0.0, which sends request fields the verification API rejects, so every validation fails. Without any constraint, Composer on PHP 5.x–7.x silently falls back to the legacy 1.x release, whose API (`EU_Captcha` class) does not match this README. On PHP 7.x or older, call the [verification API](https://docs.eu-captcha.eu/en/api/verify/) directly instead.
 
 ```bash
-composer require "myra-security-gmbh/eu-captcha:^2.0"
+composer require "myra-security-gmbh/eu-captcha:^2.0.1"
 ```
 
 ## Getting credentials
@@ -58,7 +58,7 @@ if (!$result->success()) {
 }
 ```
 
-`validate()` reads the token automatically from the request body — `$_POST['eu-captcha-response']`, falling back to a JSON request body when `$_POST` is empty (as in Laravel apps that receive JSON) — and the client IP from server headers, so no extra wiring is needed in the common case. For full control (custom field names, or a framework-aware client IP such as Laravel's `$request->ip()`), pass the token and IP explicitly — see the [Laravel](#laravel) section below.
+`validate()` reads the token automatically from the request body — `$_POST['eu-captcha-response']`, falling back to the body of an `application/json` request, where PHP leaves `$_POST` empty (e.g. Laravel or SPA clients) — and the client IP from server headers, so no extra wiring is needed in the common case. For full control (custom field names, or a framework-aware client IP such as Laravel's `$request->ip()`), pass the token and IP explicitly — see the [Laravel](#laravel) section below.
 
 ## Configuration options
 

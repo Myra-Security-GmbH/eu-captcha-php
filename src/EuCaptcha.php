@@ -76,7 +76,7 @@ class EuCaptcha implements EuCaptchaInterface
      * Validates a captcha token against the EU Captcha API.
      *
      * If $token is not provided, it is read from the request body via resolveToken()
-     * ($_POST['eu-captcha-response'], falling back to a JSON request body).
+     * ($_POST['eu-captcha-response'], falling back to an application/json request body).
      * If $remoteAddr is not provided, the client IP is resolved via resolveClientIp().
      * If $userAgent is not provided, it falls back to $_SERVER['HTTP_USER_AGENT'].
      *
@@ -132,11 +132,13 @@ class EuCaptcha implements EuCaptchaInterface
     /**
      * Resolves the captcha token from the current request.
      *
-     * Reads $_POST['eu-captcha-response'] first. When it is absent — as happens in
-     * frameworks such as Laravel that receive the request body as JSON, where PHP
-     * never populates $_POST even though the token is present — the raw request
-     * body is decoded as JSON and the token read from there. Returns an empty
-     * string when no token can be found, so the API still counts the attempt.
+     * Reads $_POST['eu-captcha-response'] first. PHP only populates $_POST for
+     * application/x-www-form-urlencoded and multipart/form-data requests, so for
+     * JSON request bodies (e.g. Laravel or SPA clients) the token is present but
+     * $_POST is empty. In that case, and only when the request's Content-Type is
+     * application/json, the raw request body is decoded as JSON and the token
+     * read from there. Returns an empty string when no token can be found, so
+     * the API still counts the attempt.
      *
      * Both sources are client-controlled, so only scalar values are accepted. A
      * non-scalar value (e.g. `eu-captcha-response[]` or a JSON array/object) is
@@ -147,6 +149,10 @@ class EuCaptcha implements EuCaptchaInterface
     {
         if (isset($_POST['eu-captcha-response']) && is_scalar($_POST['eu-captcha-response'])) {
             return (string) $_POST['eu-captcha-response'];
+        }
+
+        if (!$this->requestHasJsonBody()) {
+            return '';
         }
 
         $raw = $this->readRawRequestBody();
@@ -162,6 +168,20 @@ class EuCaptcha implements EuCaptchaInterface
         }
 
         return '';
+    }
+
+    /**
+     * Tells whether the current request declares a JSON body.
+     *
+     * The raw body is only read and decoded for application/json requests, so a
+     * form post that lacks the token never reaches the JSON path and a large
+     * non-JSON body is never decoded.
+     */
+    private function requestHasJsonBody(): bool
+    {
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+
+        return is_string($contentType) && stripos($contentType, 'application/json') !== false;
     }
 
     /**
