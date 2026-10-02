@@ -36,8 +36,8 @@ class EuCaptchaResult
      * @param bool      $stateNetwork Whether the API request completed successfully.
      * @param bool      $stateToken   Whether the captcha token was accepted as valid by the API.
      * @param bool|null $stateTrain   The `train` flag from the API response. True means the API
-     *                                skipped real validation and forced success (misconfigured
-     *                                credentials or disabled protection). False means normal
+     *                                skipped real validation and forced success (training mode
+     *                                or disabled protection on the sitekey). False means normal
      *                                operation. Null when no API response was received (network
      *                                failure).
      */
@@ -52,8 +52,8 @@ class EuCaptchaResult
      * and the `train` flag is not set.
      *
      * When `train` is true the API forced `success` to true without performing
-     * real validation (misconfigured credentials or disabled protection). This
-     * method treats that case as a failure so misconfigured sites fail securely
+     * real validation (training mode or disabled protection on the sitekey). This
+     * method treats that case as a failure so unprotected sites fail securely
      * by default. Use `isTrain()` to inspect the flag directly.
      */
     public function success(): bool
@@ -85,10 +85,11 @@ class EuCaptchaResult
      * Returns the `train` flag from the API response.
      *
      * True means the API skipped real validation and forced `success` to true —
-     * typically because the sitekey does not exist, the secret does not match,
-     * or the sitekey's protection toggle is disabled. In production this means
-     * every submission appears successful regardless of whether the user solved
-     * the captcha. Check your sitekey and secret immediately if you see this.
+     * because the sitekey owner enabled training mode or disabled the sitekey's
+     * protection in the dashboard. In production this means every submission
+     * appears successful regardless of whether the user solved the captcha.
+     * Re-enable protection immediately if you see this. An unknown sitekey or a
+     * wrong secret does not set this flag; it fails with `success` false.
      *
      * False means normal operation and `successToken()` reflects the real result.
      *
