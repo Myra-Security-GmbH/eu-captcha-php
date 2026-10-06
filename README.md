@@ -15,6 +15,8 @@ Privacy-first, no-cookie, no-manual-interaction bot protection for PHP 8.0+ appl
 composer require "myra-security-gmbh/eu-captcha:^2.0.1"
 ```
 
+Upgrading from 2.0.0? That release cannot verify tokens at all; see the [changelog](CHANGELOG.md) for what changed in 2.0.1. Run `composer update myra-security-gmbh/eu-captcha` so an existing lock file moves off 2.0.0.
+
 ## Getting credentials
 
 1. Register at [app.eu-captcha.eu](https://app.eu-captcha.eu/user-registration)
@@ -58,7 +60,7 @@ if (!$result->success()) {
 }
 ```
 
-`validate()` reads the token automatically from the request body — `$_POST['eu-captcha-response']`, falling back to the body of an `application/json` request, where PHP leaves `$_POST` empty (e.g. Laravel or SPA clients) — and the client IP from server headers, so no extra wiring is needed in the common case. For full control (custom field names, or a framework-aware client IP such as Laravel's `$request->ip()`), pass the token and IP explicitly — see the [Laravel](#laravel) section below.
+`validate()` reads the token automatically from the request body — `$_POST['eu-captcha-response']`, falling back to the body of a JSON request (`application/json` or a `+json` type such as `application/vnd.api+json`), where PHP leaves `$_POST` empty (e.g. Laravel or SPA clients) — and the client IP from server headers, so no extra wiring is needed in the common case. For full control (custom field names, or a framework-aware client IP such as Laravel's `$request->ip()`), pass the token and IP explicitly — see the [Laravel](#laravel) section below.
 
 ## Configuration options
 

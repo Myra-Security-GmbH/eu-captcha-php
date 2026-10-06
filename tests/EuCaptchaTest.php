@@ -209,9 +209,10 @@ class EuCaptchaTest extends TestCase
         $this->assertSame('json-token', $this->capturedBody($container)['client_token']);
     }
 
-    public function testValidateReadsJsonBodyWhenContentTypeHasCharsetParameter(): void
+    #[DataProvider('jsonContentTypes')]
+    public function testValidateReadsJsonBodyForJsonMediaTypes(string $contentType): void
     {
-        $_SERVER['CONTENT_TYPE'] = 'application/json; charset=utf-8';
+        $_SERVER['CONTENT_TYPE'] = $contentType;
 
         $container = [];
         $client    = $this->makeCapturingClient([new Response(200, [], json_encode(['success' => true]))], $container);
@@ -255,14 +256,29 @@ class EuCaptchaTest extends TestCase
         $this->assertSame('', $this->capturedBody($container)['client_token']);
     }
 
+    /** @return array<string, array{0: string}> */
+    public static function jsonContentTypes(): array
+    {
+        return [
+            'application/json'      => ['application/json'],
+            'with charset'          => ['application/json; charset=utf-8'],
+            'upper case'            => ['Application/JSON'],
+            'JSON:API'              => ['application/vnd.api+json'],
+            'merge patch'           => ['application/merge-patch+json'],
+            'suffix with parameter' => ['application/problem+json; charset=utf-8'],
+        ];
+    }
+
     /** @return array<string, array{0: ?string}> */
     public static function nonJsonContentTypes(): array
     {
         return [
-            'form urlencoded' => ['application/x-www-form-urlencoded'],
-            'multipart'       => ['multipart/form-data; boundary=x'],
-            'plain text'      => ['text/plain'],
-            'no content type' => [null],
+            'form urlencoded'       => ['application/x-www-form-urlencoded'],
+            'multipart'             => ['multipart/form-data; boundary=x'],
+            'plain text'            => ['text/plain'],
+            'json only in a param'  => ['text/plain; profile=application/json'],
+            'look-alike subtype'    => ['application/jsonp'],
+            'no content type'       => [null],
         ];
     }
 
