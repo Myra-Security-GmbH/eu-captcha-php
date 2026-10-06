@@ -57,7 +57,7 @@ interface EuCaptchaInterface
      * Validates a captcha token against the EU Captcha API.
      *
      * When $token is null the implementation reads $_POST['eu-captcha-response'],
-     * falling back to the same field in an application/json request body.
+     * falling back to the same field in a JSON request body (application/json or a +json type).
      * When $remoteAddr is empty it is resolved from CDN/proxy headers or REMOTE_ADDR.
      * When $userAgent is empty it falls back to $_SERVER['HTTP_USER_AGENT'].
      *
